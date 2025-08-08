@@ -1,0 +1,23 @@
+# Ignore logs directory
+logs/
+
+# Ignore bitmaps directory
+bitmaps/
+
+# Ignore converted JPGs directory if created
+jpgs/
+
+# Ignore zips directory
+zips/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Application log
+app.log
+
+# Test output files
+test_output.jpg
+bottom_bmp.jpg
