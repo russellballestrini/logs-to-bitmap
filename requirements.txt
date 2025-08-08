@@ -2,3 +2,5 @@ pyramid
 requests
 Pillow
 numpy
+opencv-python
+scikit-learn

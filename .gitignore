@@ -21,3 +21,14 @@ app.log
 # Test output files
 test_output.jpg
 bottom_bmp.jpg
+
+# Anomaly detection outputs
+anomaly_results.csv
+results_*_samples.csv
+*.pkl
+
+# Anomaly scores directory
+anomaly_scores/
+
+# Model directory
+models/
