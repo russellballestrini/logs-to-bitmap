@@ -1,6 +1,6 @@
 # Makefile for logs-to-bitmap project
 
-.PHONY: all clean run-server run-crawler run-crawler-1k zip anomaly-detect train-model-100 train-model-1k compare-models test test-unit test-integration test-functional test-overfitting test-reproducibility help
+.PHONY: all clean run-server run-crawler run-crawler-1k zip anomaly-detect train-model-100 train-model-1k compare-models test test-unit test-integration test-functional test-overfitting test-reproducibility compare-v1-v2 compare-v1-v2-cross help
 
 # Get current unix timestamp
 TIMESTAMP := $(shell date +%s)
@@ -26,6 +26,8 @@ help:
 	@echo "  make test-functional - Run functional tests (overfitting diagnosis)"
 	@echo "  make test-overfitting - Run cross-validation overfitting detection tests"
 	@echo "  make test-reproducibility - Run reproducibility and random seed tests"
+	@echo "  make compare-v1-v2   - Compare original vs enhanced feature models"
+	@echo "  make compare-v1-v2-cross - Cross-dataset comparison of models"
 
 # Clean targets
 clean:
@@ -177,3 +179,16 @@ test-reproducibility:
 	@echo "Running reproducibility and random seed tests"
 	python3 -m pytest tests/functional/test_temporal_drift.py::TestShufflingReproducibility -v
 	python3 -m pytest tests/unit/test_anomaly_detection.py::TestAnomalyDetection::test_random_sampling_reproducibility -v
+
+compare-v1-v2:
+	@echo "Comparing original vs enhanced feature extraction models"
+	python3 tests/compare_models.py
+
+compare-v1-v2-cross:
+	@echo "Cross-dataset comparison of v1 vs v2 models"
+	@if [ -d "images_train" ] && [ -d "images" ]; then \
+		python3 tests/compare_models.py --train-dir images_train --test-dir images; \
+	else \
+		echo "Error: Need both images_train/ (training) and images/ (test) directories"; \
+		echo "Run: mv images images_train && make run-crawler-1k"; \
+	fi
