@@ -1,11 +1,8 @@
 # Ignore logs directory
 logs/
 
-# Ignore bitmaps directory
-bitmaps/
-
-# Ignore converted JPGs directory if created
-jpgs/
+# Ignore images directory
+images/
 
 # Ignore zips directory
 zips/
@@ -17,15 +14,6 @@ __pycache__/
 
 # Application log
 app.log
-
-# Test output files
-test_output.jpg
-bottom_bmp.jpg
-
-# Anomaly detection outputs
-anomaly_results.csv
-results_*_samples.csv
-*.pkl
 
 # Anomaly scores directory
 anomaly_scores/

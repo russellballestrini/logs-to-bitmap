@@ -15,10 +15,12 @@ from sklearn.preprocessing import StandardScaler
 import pickle
 import argparse
 from pathlib import Path
+import random
+from collections import defaultdict
 
 
 class RequestBitmapAnomalyDetector:
-    def __init__(self, contamination=0.01, n_estimators=100, random_state=42):
+    def __init__(self, contamination=0.01, n_estimators=100, random_state=42, file_type='all'):
         """
         Initialize anomaly detector for HTTP request bitmaps
         
@@ -26,10 +28,15 @@ class RequestBitmapAnomalyDetector:
             contamination: Expected proportion of outliers (default: 1%)
             n_estimators: Number of isolation trees
             random_state: Random seed for reproducibility
+            file_type: Which file types to use ('bmp', 'jpg', 'png', 'webp', 'all')
         """
         self.contamination = contamination
         self.n_estimators = n_estimators
         self.random_state = random_state
+        self.file_type = file_type
+        
+        # Initialize numpy random generator for consistent reproducibility
+        self.rng = np.random.RandomState(random_state)
         
         # Initialize models
         self.isolation_forest = IsolationForest(
@@ -97,10 +104,10 @@ class RequestBitmapAnomalyDetector:
     
     def load_dataset(self, bitmap_dir):
         """
-        Load all bitmap images and extract features
+        Load images and extract features, randomly sampling one format per request
         
         Args:
-            bitmap_dir: Directory containing bitmap files
+            bitmap_dir: Directory containing image files
             
         Returns:
             features: Feature matrix
@@ -108,19 +115,58 @@ class RequestBitmapAnomalyDetector:
         """
         bitmap_dir = Path(bitmap_dir)
         
-        # Find all BMP files
-        image_paths = list(bitmap_dir.glob('*.bmp'))
-        image_paths.sort()
+        # Group images by request number (first 6 digits before first underscore)
+        request_groups = defaultdict(list)
         
-        if not image_paths:
-            raise ValueError(f"No BMP files found in {bitmap_dir}")
+        if self.file_type == 'all':
+            # Get all supported image formats
+            all_images = []
+            for ext in ['*.bmp', '*.jpg', '*.jpeg', '*.png', '*.webp']:
+                all_images.extend(list(bitmap_dir.glob(ext)))
+        elif self.file_type == 'bmp':
+            all_images = list(bitmap_dir.glob('*.bmp'))
+        elif self.file_type == 'jpg':
+            all_images = list(bitmap_dir.glob('*.jpg')) + list(bitmap_dir.glob('*.jpeg'))
+        elif self.file_type == 'png':
+            all_images = list(bitmap_dir.glob('*.png'))
+        elif self.file_type == 'webp':
+            all_images = list(bitmap_dir.glob('*.webp'))
         
-        print(f"Loading {len(image_paths)} bitmap images...")
+        # Group by request number (extract request number from filename)
+        for image_path in all_images:
+            filename = image_path.name
+            request_num = filename.split('_')[0]  # Get the 6-digit request number
+            request_groups[request_num].append(image_path)
+        
+        if not request_groups:
+            file_types = {'bmp': 'BMP', 'jpg': 'JPG/JPEG', 'png': 'PNG', 'webp': 'WebP', 'all': 'all supported image'}
+            raise ValueError(f"No {file_types[self.file_type]} files found in {bitmap_dir}")
+        
+        # Randomly sample one image per request
+        selected_images = []
+        for request_num, images in request_groups.items():
+            if self.file_type == 'all':
+                # For 'all' mode, randomly pick one format per request
+                selected_image = self.rng.choice(images)
+            else:
+                # For specific file type, should only be one image per request
+                selected_image = images[0] if images else None
+            
+            if selected_image:
+                selected_images.append(selected_image)
+        
+        selected_images.sort()
+        
+        # Shuffle the selected images to randomize temporal order for training
+        self.rng.shuffle(selected_images)
+        
+        file_type_str = {'bmp': 'BMP', 'jpg': 'JPEG', 'png': 'PNG', 'webp': 'WebP', 'all': 'mixed format'}[self.file_type]
+        print(f"Loading {len(selected_images)} {file_type_str} files (1 per request from {len(request_groups)} unique requests, shuffled for training)...")
         
         features = []
         valid_paths = []
         
-        for image_path in image_paths:
+        for image_path in selected_images:
             try:
                 feature_vector = self.extract_features(image_path)
                 features.append(feature_vector)
@@ -266,7 +312,8 @@ class RequestBitmapAnomalyDetector:
             'scaler': self.scaler,
             'contamination': self.contamination,
             'n_estimators': self.n_estimators,
-            'random_state': self.random_state
+            'random_state': self.random_state,
+            'file_type': self.file_type
         }
         
         with open(model_path, 'wb') as f:
@@ -284,6 +331,7 @@ class RequestBitmapAnomalyDetector:
         self.contamination = model_data['contamination']
         self.n_estimators = model_data['n_estimators']
         self.random_state = model_data['random_state']
+        self.file_type = model_data.get('file_type', 'all')  # Default to 'all' for old models
         self.is_trained = True
         
         print(f"Model loaded from: {model_path}")
@@ -317,13 +365,16 @@ Examples:
     parser.add_argument('--output', '-o', help='Output CSV file for results')
     parser.add_argument('--save-model', help='Save trained model to file')
     parser.add_argument('--load-model', help='Load pre-trained model from file')
+    parser.add_argument('--file-type', choices=['bmp', 'jpg', 'png', 'webp', 'all'], default='all',
+                       help='Which file types to use for training/detection (default: all)')
     
     args = parser.parse_args()
     
     # Initialize detector
     detector = RequestBitmapAnomalyDetector(
         contamination=args.contamination,
-        n_estimators=args.estimators
+        n_estimators=args.estimators,
+        file_type=args.file_type
     )
     
     try:
