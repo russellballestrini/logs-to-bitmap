@@ -53,8 +53,9 @@ convert-bitmaps:
 # Anomaly detection
 anomaly-detect:
 	@echo "Running anomaly detection on bitmap samples"
+	@mkdir -p anomaly_scores
 	@if [ -d "bitmaps" ] && [ -n "$$(ls -A bitmaps/ 2>/dev/null)" ]; then \
-		python3 anomaly_detection.py bitmaps/ --output anomaly_results.csv; \
+		python3 anomaly_detection.py bitmaps/ --output anomaly_scores/anomaly_results.csv; \
 	else \
 		echo "Error: No bitmap files found. Run 'make run-crawler' first."; \
 		exit 1; \
@@ -63,11 +64,11 @@ anomaly-detect:
 # Model training targets
 train-model-100:
 	@echo "Training model on 100-sample dataset"
-	@mkdir -p models
+	@mkdir -p models anomaly_scores
 	@if [ -d "bitmaps" ] && [ -n "$$(ls -A bitmaps/ 2>/dev/null)" ]; then \
 		SAMPLE_COUNT=$$(ls bitmaps/*.bmp | wc -l); \
 		if [ "$$SAMPLE_COUNT" -eq 100 ]; then \
-			python3 anomaly_detection.py bitmaps/ --save-model models/model_100_samples_$(TIMESTAMP).pkl --output results_100_samples.csv; \
+			python3 anomaly_detection.py bitmaps/ --save-model models/model_100_samples_$(TIMESTAMP).pkl --output anomaly_scores/results_100_samples.csv; \
 			echo "Model saved: models/model_100_samples_$(TIMESTAMP).pkl"; \
 		else \
 			echo "Error: Expected 100 samples, found $$SAMPLE_COUNT. Run 'make run-crawler' first."; \
@@ -80,11 +81,11 @@ train-model-100:
 
 train-model-1k:
 	@echo "Training model on 1K-sample dataset"
-	@mkdir -p models
+	@mkdir -p models anomaly_scores
 	@if [ -d "bitmaps" ] && [ -n "$$(ls -A bitmaps/ 2>/dev/null)" ]; then \
 		SAMPLE_COUNT=$$(ls bitmaps/*.bmp | wc -l); \
 		if [ "$$SAMPLE_COUNT" -eq 1000 ]; then \
-			python3 anomaly_detection.py bitmaps/ --contamination 0.01 --estimators 200 --save-model models/model_1k_samples_$(TIMESTAMP).pkl --output results_1k_samples.csv; \
+			python3 anomaly_detection.py bitmaps/ --contamination 0.01 --estimators 200 --save-model models/model_1k_samples_$(TIMESTAMP).pkl --output anomaly_scores/results_1k_samples.csv; \
 			echo "Model saved: models/model_1k_samples_$(TIMESTAMP).pkl"; \
 		else \
 			echo "Error: Expected 1000 samples, found $$SAMPLE_COUNT. Run 'make run-crawler-1k' first."; \
