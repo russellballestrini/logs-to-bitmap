@@ -1,6 +1,6 @@
 # Makefile for logs-to-bitmap project
 
-.PHONY: all clean run-server run-crawler run-crawler-1k zip anomaly-detect train-model-100 train-model-1k compare-models test test-unit test-integration test-functional test-overfitting test-reproducibility compare-v1-v2 compare-v1-v2-cross help
+.PHONY: all clean run-server run-crawler run-crawler-1k run-crawler-1k-v3 zip anomaly-detect train-model-100 train-model-1k compare-models test test-unit test-integration test-functional test-overfitting test-reproducibility compare-v1-v2 compare-v1-v2-cross help
 
 # Get current unix timestamp
 TIMESTAMP := $(shell date +%s)
@@ -15,6 +15,7 @@ help:
 	@echo "  make run-server      - Start the Pyramid server"
 	@echo "  make run-crawler     - Run the original crawler (100 requests)"
 	@echo "  make run-crawler-1k  - Run 1K crawler (1000 requests with 10 anomalies)"
+	@echo "  make run-crawler-1k-v3 - Run V3 chaos crawler (diverse attack patterns)"
 	@echo "  make anomaly-detect  - Run anomaly detection on bitmap samples"
 	@echo "  make train-model-100 - Train model on 100-sample dataset"
 	@echo "  make train-model-1k  - Train model on 1K-sample dataset"
@@ -36,6 +37,8 @@ clean:
 	@echo "Log files removed"
 	rm -f images/*
 	@echo "Image files (BMP and JPEG) removed"
+	rm -f pastebin.db
+	@echo "Database removed"
 
 
 # Run targets
@@ -51,6 +54,10 @@ run-crawler:
 run-crawler-1k:
 	@echo "Running 1K crawler (1000 requests with 10 anomalies)"
 	python3 utils/crawler_1k.py
+
+run-crawler-1k-v3:
+	@echo "Running V3 chaos crawler (1000 requests with diverse attack patterns)"
+	python3 utils/crawler_1k_v3.py
 
 
 # Anomaly detection
