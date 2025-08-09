@@ -8,6 +8,9 @@ import os
 import uuid
 from PIL import Image, ImageDraw, ImageFont
 import threading
+import multiprocessing
+from concurrent.futures import ThreadPoolExecutor
+import queue
 
 # Configure logging
 logging.basicConfig(
@@ -22,11 +25,16 @@ logger = logging.getLogger(__name__)
 
 # Create directories if they don't exist
 os.makedirs('logs', exist_ok=True)
-os.makedirs('bitmaps', exist_ok=True)
+os.makedirs('images', exist_ok=True)
 
 # Global request counter with thread safety
 request_counter = 0
 counter_lock = threading.Lock()
+
+# Thread pool for file generation
+WORKER_COUNT = multiprocessing.cpu_count()
+file_worker_pool = ThreadPoolExecutor(max_workers=WORKER_COUNT, thread_name_prefix="FileWorker")
+logger.info(f"Starting {WORKER_COUNT} file generation workers")
 
 class BitmapGenerator:
     def __init__(self, font_size=12, char_width=7, line_height=14):
@@ -123,9 +131,46 @@ class BitmapGenerator:
         
         # Save as BMP
         img.save(bitmap_path, 'BMP')
+        
+        # Also save as JPEG with very high quality
+        jpeg_path = str(bitmap_path).replace('.bmp', '.jpg')
+        img.save(jpeg_path, 'JPEG', quality=98)
+        
+        # Save as PNG (lossless compression)
+        png_path = str(bitmap_path).replace('.bmp', '.png')
+        img.save(png_path, 'PNG')
+        
+        # Save as WebP (better compression than JPEG)
+        webp_path = str(bitmap_path).replace('.bmp', '.webp')
+        img.save(webp_path, 'WebP', quality=95, lossless=False)
 
 # Initialize bitmap generator
 bitmap_gen = BitmapGenerator()
+
+def generate_files_worker(log_data, filename, bitmap_filename):
+    """Worker function to generate log and image files"""
+    try:
+        # Write log file
+        with open(filename, 'w') as f:
+            f.write(f"Timestamp: {log_data['Timestamp']}\n")
+            f.write(f"Request ID: {log_data['Request ID']}\n")
+            f.write(f"Endpoint: {log_data['Endpoint']}\n")
+            f.write(f"Client Address: {log_data['Client Address']}\n")
+            f.write(f"User-Agent: {log_data['User-Agent']}\n")
+            f.write(f"Method: {log_data['Method']}\n")
+            f.write(f"URL: {log_data['URL']}\n")
+            f.write(f"Headers:\n")
+            for header in log_data['Headers']:
+                f.write(f"  {header}\n")
+        
+        # Create all image formats
+        bitmap_gen.create_bitmap(log_data, bitmap_filename)
+        
+        logger.info(f"Generated files for request ID {log_data['Request ID']} "
+                   f"(worker: {threading.current_thread().name})")
+        
+    except Exception as e:
+        logger.error(f"Error generating files for {log_data['Request ID']}: {e}")
 
 def request_counter_middleware(handler, registry):
     """Middleware to count requests"""
@@ -138,7 +183,7 @@ def request_counter_middleware(handler, registry):
     return middleware
 
 def log_request(request, endpoint):
-    """Log each request to a separate file and create bitmap"""
+    """Log each request to a separate file and create bitmap (async)"""
     user_agent = request.headers.get('User-Agent', 'Unknown')
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')
     request_id = str(uuid.uuid4())[:8]
@@ -146,7 +191,7 @@ def log_request(request, endpoint):
     
     # Include request number at the beginning of filenames
     filename = f"logs/{request_num:06d}_request_{timestamp}_{request_id}.log"
-    bitmap_filename = f"bitmaps/{request_num:06d}_request_{timestamp}_{request_id}.bmp"
+    bitmap_filename = f"images/{request_num:06d}_request_{timestamp}_{request_id}.bmp"
     
     # Prepare log data
     log_data = {
@@ -167,23 +212,12 @@ def log_request(request, endpoint):
     headers.sort()
     log_data['Headers'] = headers
     
-    # Write log file
-    with open(filename, 'w') as f:
-        f.write(f"Timestamp: {log_data['Timestamp']}\n")
-        f.write(f"Request ID: {log_data['Request ID']}\n")
-        f.write(f"Endpoint: {log_data['Endpoint']}\n")
-        f.write(f"Client Address: {log_data['Client Address']}\n")
-        f.write(f"User-Agent: {log_data['User-Agent']}\n")
-        f.write(f"Method: {log_data['Method']}\n")
-        f.write(f"URL: {log_data['URL']}\n")
-        f.write(f"Headers:\n")
-        for header in headers:
-            f.write(f"  {header}\n")
+    # Submit work to thread pool (non-blocking)
+    future = file_worker_pool.submit(generate_files_worker, log_data, filename, bitmap_filename)
     
-    # Create bitmap
-    bitmap_gen.create_bitmap(log_data, bitmap_filename)
-    
-    logger.info(f"Request #{request_num} to {endpoint} from {request.client_addr} with User-Agent: {user_agent} - Logged to {filename} and {bitmap_filename}")
+    # Log the request immediately (without waiting for file generation)
+    logger.info(f"Request #{request_num} to {endpoint} from {request.client_addr} "
+               f"with User-Agent: {user_agent} - Queued for processing (ID: {request_id})")
 
 @view_config(route_name='home')
 def home_view(request):
@@ -207,8 +241,14 @@ def main():
     
     app = config.make_wsgi_app()
     server = make_server('localhost', 6543, app)
-    print('Server started at http://localhost:6543')
-    server.serve_forever()
+    print(f'Server started at http://localhost:6543 with {WORKER_COUNT} file generation workers')
+    
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nShutting down server...")
+        file_worker_pool.shutdown(wait=True)
+        print("All workers completed. Server stopped.")
 
 if __name__ == '__main__':
     main()
